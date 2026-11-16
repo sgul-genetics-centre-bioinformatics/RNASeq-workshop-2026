@@ -11,6 +11,6 @@ Start RStudio:
   -Choose: Version Control > Git
   -Paste the following address into the "Repository URL" field: https://github.com/alanmichaelpittman100/AI_Coding_R_Copilot
   -Press tab key ("Project directory name" field will be filled automatically)
-  *Choose a destination folder in the "Create project as subdirectory of..." field
-  *Click the "Create project" button
-  *Open the "AI_and_coding_2026.Rmd" file and follow the instructions inside
+  * Choose a destination folder in the "Create project as subdirectory of..." field
+  * Click the "Create project" button
+  * Open the "AI_and_coding_2026.Rmd" file and follow the instructions inside
