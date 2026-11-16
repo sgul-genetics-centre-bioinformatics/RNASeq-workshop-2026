@@ -14,4 +14,4 @@ Then:
   * Press tab key ("Project directory name" field will be filled automatically)
   * Choose a destination folder in the "Create project as subdirectory of..." field
   * Click the "Create project" button
-  * Open the "RNA_seq_zebrafish_analysis.Rmd" file and follow the instructions inside
+  * Open the "RNA_seq_zebrafish_analysis_MSci2026.Rmd" file and follow the instructions inside
