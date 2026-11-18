@@ -1,0 +1,371 @@
+---
+title: "Zebrafish RNA Seq"
+author: "Alan Pittman"
+date: "16/11/2026"
+output: html_document
+---
+
+# .libPaths("/homedirs8/shms/workshops/Alan")
+
+```{r}
+
+mylib <- "/homedirs8/shms/workshops/Alan"
+
+#install.packages(
+#  "BiocManager",
+#  lib = mylib,
+#  repos = "https://cloud.r-project.org"
+#)
+
+```
+
+```{r}
+#BiocManager::install(c("DESeq2", "ggplot2", "org.Dr.eg.db", "ggrepel", "dplyr", "tidyverse", "msigdbr", "fgsea" ), force = TRUE, lib = mylib)
+```
+
+Now loading the required packages into R:
+
+```{r}
+library("DESeq2", lib.loc = mylib)
+library("ggplot2", lib.loc = mylib)
+library("org.Dr.eg.db", lib.loc = mylib)
+library("ggrepel", lib.loc = mylib)
+library("dplyr", lib.loc = mylib)
+library("tidyverse", lib.loc = mylib)
+```
+
+Load count data into R:
+
+Here we are using 2 built in R functions read.table() and as.matrix() 
+to import a text file into R that contains the RNAseq count data we will analyse. 
+
+The as.matrix function converts our imported text file into an R matrix object called "DMD_Counts_table"
+Check the envirnment pane on the right after executing the code below.
+
+Execute the following block of R code:
+
+```{r}
+DMD_Counts_table <- as.matrix(read.table("DMD_Counts_table.txt", header = TRUE))
+```
+
+By modifying the read.table() function with "header = TRUE" our R matrix object will have defined column headers as the the first line of our file.
+View the top of the "DMD_Counts_table" matrix object using the head command in R:
+
+Here we are using the built in R function head() to view the top of the DMD_Counts_table matrix object:
+
+```{r}
+head(DMD_Counts_table)
+```
+
+
+By default, the head() function is showing us the first 6 lines, we can modify the head command to show us a different number of lines if required. In the modified code below we can view the first 12 lines:
+
+```{r}
+head(DMD_Counts_table, n = 12)
+```
+
+Q. Insert a head function in the block below to view different numbers of lines of the DMD_Counts_table object.
+
+```{r}
+
+```
+
+Q. Take a moment and look at how the count data is arranged; the first column is the genomic feature (in our case a gene) and the subsequent columns are count data of reads each of our samples.
+
+
+#-------------------------------------------------
+########### CREATE OUR DESE2 EXPERIMENT ##########
+#-------------------------------------------------
+
+Here we are creating a new R matrix object called DESeq2Experiment using the as.matrix() function on our DMD_Counts_table object:
+
+```{r}
+DESeq2Experiment <- as.matrix(DMD_Counts_table)
+```
+
+
+We will perform our analysis using the commonly used RNAseq package "DESeq2" on our DESeq2Experiemnt matrix. 
+
+The simplest design formula for differential expression would be ~ condition, where condition is a column in coldata(DESeq2Experiment) that specifies which of two (or more groups) the samples belong to.
+
+To build our experiment in DESeq2, we need to assign "UIC" or "DMD" status to each of the columns of count data.
+We have three replicates for each condition.
+
+```{r}
+condition <- factor(c(rep("DMD", 3), rep("UIC", 3)))
+```
+
+Here we create a data frame of our experimental conditions, the order of the samples we have just specified.
+
+```{r}
+coldata <- data.frame(row.names=colnames(DESeq2Experiment), condition)
+```
+
+Next we will define our DESeq2 experiment design to the "condition" of the count data of the experimentl samples as defined above. This is achieved with the DESeq2 function DESeqDataSetFromMatrix()
+
+```{r}
+DESeq2Experiment <- DESeqDataSetFromMatrix(countData=DESeq2Experiment, colData=coldata, design=~condition)
+```
+This means that in our DESeq2 analysis we will be comparing the wt condition of our samples to the DMD knockout samples.
+
+We just need to check that our base reference is the "UIC" sample:
+
+```{r}
+DESeq2Experiment$condition
+```
+Our base level is "DMD" and we need to change our base level to "UIC". It is preferred that the first level of a factor be the reference level (e.g. control, or untreated samples, or UIC in our case)
+
+We can re-level the order with the following relevel() function- this is because we want out untreated cells to be at the base level when we perform the differential gene expression analysis:
+
+```{r}
+DESeq2Experiment$condition <- relevel(DESeq2Experiment$condition, "UIC")
+```
+
+Now just checking again that the level ordering has been changed:
+
+```{r}
+DESeq2Experiment$condition
+```
+Now our base level is "UIC" ; thus we have successfully constructed our DESeq2 experiment
+
+
+#-------------------------------------------------
+########### QC and Data Visualization ############
+#-------------------------------------------------
+
+
+Here we are are performing two kinds of data transformation (rlog and vst) in order to make the count data more amenable to visualisation later on:
+
+```{r}
+# Perform rlog transformation
+	# rlog tends to work well on small datasets (n < 30)
+rld <- rlog(DESeq2Experiment,
+			blind = FALSE)
+
+## Perform VST transformation
+vsd <- vst(DESeq2Experiment,
+			blind = FALSE)
+```
+
+
+################### SCATTER PLORS ################
+
+Here we will draw some scatter plots of our count data to compare randomly selected samples to each other.
+First we are making a function called "plotFun" that will draw a scatter plot from a pair of variables (in this case two of our samples)
+
+```{r}
+# Lets have a look at the scatter plots using the pairs function. 
+	# We will only show 10 representative graphs of randomly selected samples
+
+# Define a function to draw a scatter plot for a pair of variables (samples) with density colours
+plotFun <- function(x,y) { 
+
+  dns <- densCols(x,y); 
+  points(x,y, 
+		col=dns, 
+		pch=".", 
+		panel.first=grid());  
+
+  }
+
+# Plot the scatter plot for a few pairs of variables selected at random
+set.seed(123) # forces the random number generator to produce fixed results
+
+pairs(log2(counts(DESeq2Experiment)[,sample(ncol(counts(DESeq2Experiment)),5)] + 1), 
+      panel=plotFun, 
+	  lower.panel = NULL)
+
+```
+Q. Take a moment to look at the graphs. What do you see? What are we comparing?
+
+####################### PCA ######################
+
+With a PCA analysis we can visualize how close (or far) our experimental samples cluster from one another. In normal experimental conditions we would like our sample replicates to not be too dissimilar from each other.
+
+In this ordination method, the data points (here, the samples) are projected onto the 2D plane such that they spread out in the two directions that explain most of the differences. The x-axis is the direction that separates the data points the most. The values of the samples in this direction are written PC1. The y-axis is a direction (it must be orthogonal to the first direction) that separates the data the second most. The values of the samples in this direction are written PC2. The percent of the total variance that is contained in the direction is printed in the axis label. Note that these percentages do not add to 100%, because there are more dimensions that contain the remaining variance (although each of these remaining dimensions will explain less than the two that we see).
+
+The following function plotPCA() in the DESeq2 package will generate a PCA plot of our rlog transformed count data.
+
+```{r}
+
+pcaData <- plotPCA(rld, 
+					intgroup = c("condition"),
+					returnData = TRUE)
+
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+
+
+ggplot(pcaData, aes(x = PC1, y = PC2, color = condition)) +
+  geom_point(size =3) +
+  xlab(paste0("PC1: ", percentVar[1], "% variance")) +
+  ylab(paste0("PC2: ", percentVar[2], "% variance")) +
+  coord_fixed()
+
+```
+
+Q. Take a moment to look at the PCA plot. What is this analysis showing us? Do you see any outliers?
+
+#-------------------------------------------------
+####### Differential gene expression analysis ####
+#-------------------------------------------------
+
+```{r}
+# DESeq2 analysis 
+DESeq2Experiment <- DESeq(DESeq2Experiment)
+
+# Build a results table
+	# Note that by default, the FDR cutoff of results() is 0.1
+res <- results(DESeq2Experiment)
+
+# Get metadata of results table (res)
+mcols(res, use.names = TRUE)
+
+# Get more summary of res
+summary(res)
+
+# Filter results (res) by setting a lower cutoff
+	# FRD (padj) - set it to < 0.05 to see how many significant results you have
+res.05 <- results(DESeq2Experiment,
+					alpha = 0.05)
+
+print("padj < 0.05")
+
+#print the number of significant genes
+
+table(res.05$padj < 0.05)
+```
+
+Q. How many genes are significantly different?
+
+Q. What is the adjusted p value?
+
+Q. What are the low counts ?
+
+Q. Write below the command below to view the results table with the head() function in R:
+
+```{r}
+
+```
+
+
+The column log2FoldChange is the effect size estimate. It tells us how much the gene's expression has changed due to the treatment in comparison to the untreated samples. This value is reported on a logarithmic scale to base 2; for example, a log2 fold change of 1.5 means that the gene's expression is increased by a multiplicative factor of 2(1.5) = 2.82.
+
+Q. Take a moment to look at the results table. What information has DESeq2 reported? What additional information would we like to have alongside our results?
+
+
+We can also summarize the results with the following line of code, which reports some additional information:
+
+```{r}
+summary(res)
+```
+MA - Plot
+
+An MA-plot provides a useful overview for an experiment with a two-group comparison. 
+Significant results below our threshold (padj<0.05) are denoted in red, non-significant results are in black.
+An MA-plot can be generated with the plotMA() function in R:
+
+```{r}
+plotMA(res, 
+	ylim=c(-5,5))
+```
+
+Q. Why do you think this graph has this characteristic shape ?
+
+
+Annotating and exporting results
+Annotate with gene IDs (gene symbol and EntrezID);  use org.Dr.eg.db package
+It is useful to look at the data with the added gene names !!!
+
+
+```{r}
+
+res$symbol <- mapIds(org.Dr.eg.db,
+                     keys=row.names(res),
+                     column="SYMBOL",
+                     keytype="ENSEMBL",
+                     multiVals="first")
+
+res$entrez <- mapIds(org.Dr.eg.db,
+                   keys=row.names(res),
+                   column="ENTREZID",
+                   keytype="ENSEMBL",
+                   multiVals="first")
+
+#Ordering results by adjusted pvalues
+resOrdered <- res[order(res$padj), ]
+head(resOrdered)
+
+
+```
+
+-------------- > Volcano Plot !!!!
+
+A Volcano plot is a nice way of presenting differential gene expression analysis from RNAseq data.
+
+In statistics, a volcano plot is a type of scatter-plot that is used to quickly identify changes in large data sets composed of replicate data. It plots significance versus fold-change on the y and x axes, respectively. 
+
+```{r}
+
+resOrderedDF <- as.data.frame(resOrdered)
+
+# add a column of NAs
+resOrderedDF$diffexpressed <- "NO"
+# if log2Foldchange > 0.6 and padj < 0.05, set as "UP" 
+resOrderedDF$diffexpressed[resOrderedDF$log2FoldChange > 1 & resOrderedDF$padj < 0.05] <- "UP"
+# if log2Foldchange < -0.6 and padj < 0.05, set as "DOWN"
+resOrderedDF$diffexpressed[resOrderedDF$log2FoldChange < -1 & resOrderedDF$padj < 0.05] <- "DOWN"
+
+resOrderedDF$delabel <- NA
+resOrderedDF$delabel[resOrderedDF$diffexpressed != "NO"] <- resOrderedDF$symbol[resOrderedDF$diffexpressed != "NO"]
+
+# Re-plot but this time color the points with "diffexpressed"
+p <- ggplot(data=resOrderedDF, aes(x=log2FoldChange, y=-log10(padj), col=diffexpressed, label=delabel)) + 
+      geom_point(na.rm = TRUE) +
+      geom_text_repel(size = 2.5, na.rm = TRUE) +
+      theme_minimal() +
+      geom_vline(xintercept=c(-1, 1), col="red") +
+      geom_hline(yintercept=-log10(0.05), col="red")
+      scale_color_manual(values=c("blue", "black", "red"))
+
+p
+
+```
+
+Q. What is the top diferentially expressed gene by looking at the volcano plot ?
+
+Exporting expression results
+
+```{r}
+resOrderedDF <- as.data.frame(resOrdered)
+output.CSV <- "Differential_expression_results.csv"
+write.csv(resOrderedDF, file = output.CSV)
+```
+
+
+Q. What is the most significantly up-regulated gene?
+
+Q. What is the most significantly down-regulated gene?
+
+Q. What is result of the DMD gene ?? what do you think is the significance of this ??
+
+
+
+#-------------------------------------------------
+#######     GENE SET ENRICHMENT ANALYSIS     ####
+#-------------------------------------------------
+
+1. Go to:https://bioinformatics.sdstate.edu/go77/
+
+2. Download your Differential_gene_expression_results.csv file
+
+3. Copy the list of significant differential expressed genes (symbol) and paste into shinyGO website
+
+Q. What are the top 10 most significant enriched pathways?
+Q. How do these pathways relate to the zebrafish DMD knockout experiment ?
+
+Fin!
+
+
+questions : Alan Pittman apittman@sgul.ac.uk
+
+
